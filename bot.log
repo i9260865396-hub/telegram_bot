@@ -1,7 +1,7 @@
  
 Traceback (most recent call last):
   File "C:\telegram_bot\app.py", line 9, in <module>
-    from handlers import welcome, admin  # пока только нужные
+    from handlers import welcome, admin  # при желании добавишь и другие роутеры
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "C:\telegram_bot\handlers\__init__.py", line 1, in <module>
     from . import welcome, admin, order, status

@@ -1,0 +1,11 @@
+2025-09-20 17:48:27,503 | INFO | __main__ | Starting bot...
+2025-09-20 17:48:27,707 | INFO | aiogram.dispatcher | Start polling
+2025-09-20 17:48:28,050 | INFO | aiogram.dispatcher | Run polling for bot @my_tipo_test_bot id=8310053894 - 'my_tipo_test'
+2025-09-20 17:48:28,133 | INFO | aiogram.event | Update id=266230361 is not handled. Duration 1 ms by bot id=8310053894
+2025-09-20 17:48:39,141 | INFO | aiogram.event | Update id=266230362 is not handled. Duration 0 ms by bot id=8310053894
+2025-09-20 17:49:31,887 | INFO | __main__ | Starting bot...
+2025-09-20 17:49:32,076 | INFO | aiogram.dispatcher | Start polling
+2025-09-20 17:49:32,383 | INFO | aiogram.dispatcher | Run polling for bot @my_tipo_test_bot id=8310053894 - 'my_tipo_test'
+2025-09-20 17:49:32,801 | INFO | aiogram.event | Update id=266230364 is handled. Duration 291 ms by bot id=8310053894
+2025-09-20 17:49:32,822 | INFO | aiogram.event | Update id=266230363 is handled. Duration 312 ms by bot id=8310053894
+2025-09-20 17:49:41,770 | INFO | aiogram.event | Update id=266230365 is not handled. Duration 0 ms by bot id=8310053894

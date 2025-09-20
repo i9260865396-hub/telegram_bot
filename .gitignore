@@ -1,0 +1,30 @@
+# --- Python cache ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# --- Virtual environments ---
+.venv/
+env/
+venv/
+
+# --- IDE configs ---
+.vscode/
+.idea/
+
+# --- Databases / local data ---
+bot.db
+*.sqlite3
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Environment files ---
+.env
+
+# --- System files ---
+.DS_Store
+Thumbs.db

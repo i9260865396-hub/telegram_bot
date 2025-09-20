@@ -1,12 +1,9 @@
-from aiogram import Router, F
-from aiogram.types import Message
-from keyboards.main import main_menu
+from aiogram import Router, types
+from aiogram.filters import Command
 
-router = Router(name="welcome")
+router = Router()
 
-@router.message(F.text == "/start")
-async def start_cmd(message: Message):
-    await message.answer(
-        "Привет! Я бот типографии. Выберите действие ниже 👇",
-        reply_markup=main_menu()
-    )
+
+@router.message(Command("start"))
+async def start_cmd(message: types.Message):
+    await message.answer("👋 Привет! Это бот для заказов печати.\n\nДоступные команды:\n/start — перезапуск\n/admin — админка (для админов)")

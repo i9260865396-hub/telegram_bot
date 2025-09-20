@@ -1,28 +1,22 @@
 @echo off
-setlocal
-title Telegram Print Bot - Start
+title Telegram Print Bot (autoupdate + autolog)
 
-REM Переходим в текущую папку, где лежит батник (корень проекта)
-cd /d %~dp0
+:loop
+echo [INFO] Проверяю обновления в GitHub...
+cd /d C:\telegram_bot
+git pull origin main
 
-IF NOT EXIST .venv (
-  echo [ERR] No venv found. Run install_deps_once.bat first.
-  pause
-  exit /b 1
-)
+echo [INFO] Очищаю старый лог...
+echo. > bot.log
 
-IF NOT EXIST .env (
-  echo [ERR] .env not found in %cd%\.env
-  pause
-  exit /b 1
-)
+echo [INFO] Запускаю бота...
+.venv\Scripts\python.exe app.py >> bot.log 2>&1
 
-IF NOT EXIST logs mkdir logs
-set PYTHONUTF8=1
+echo [INFO] Бот завершился. Сохраняю лог в GitHub...
+git add bot.log
+git commit -m "update bot.log" >nul 2>&1
+git push origin main
 
-REM Логи в файл уже пишет сам бот (logs\bot.log). Просто запускаем.
-.\.venv\Scripts\python.exe app.py
-
-echo.
-echo [INFO] Bot process finished (check logs\bot.log for details).
-pause
+echo [INFO] Жду 5 секунд перед новым запуском...
+timeout /t 5 >nul
+goto loop

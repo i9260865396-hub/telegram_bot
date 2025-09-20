@@ -1,18 +1,18 @@
-import asyncio
-from sqlalchemy import select
-from database.db import SessionLocal
-from database.models import Admin, Order
-
-async def run():
-    async with SessionLocal() as session:
-        admins = (await session.execute(select(Admin))).scalars().all()
-        orders = (await session.execute(select(Order))).scalars().all()
-    print("=== ADMINS ===")
-    for a in admins:
-        print({"user_id": a.user_id})
-    print("\n=== ORDERS ===")
-    for o in orders:
-        print({"id": o.id, "user_id": o.user_id, "status": o.status, "desc": o.description[:80]})
+from database.db import get_admins, get_all_orders
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    print("=== ADMINS ===")
+    admins = get_admins()
+    if not admins:
+        print("Пока админов нет")
+    else:
+        for a in admins:
+            print({"user_id": a})
+
+    print("\n=== ORDERS ===")
+    orders = get_all_orders()
+    if not orders:
+        print("Пока заказов нет")
+    else:
+        for o in orders:
+            print(o)

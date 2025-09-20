@@ -9,3 +9,97 @@
 2025-09-20 17:49:32,801 | INFO | aiogram.event | Update id=266230364 is handled. Duration 291 ms by bot id=8310053894
 2025-09-20 17:49:32,822 | INFO | aiogram.event | Update id=266230363 is handled. Duration 312 ms by bot id=8310053894
 2025-09-20 17:49:41,770 | INFO | aiogram.event | Update id=266230365 is not handled. Duration 0 ms by bot id=8310053894
+2025-09-20 22:27:56,492 | INFO | __main__ | Starting bot...
+2025-09-20 22:27:56,694 | INFO | aiogram.dispatcher | Start polling
+2025-09-20 22:27:57,064 | INFO | aiogram.dispatcher | Run polling for bot @my_tipo_test_bot id=8310053894 - 'my_tipo_test'
+2025-09-20 22:27:57,147 | INFO | aiogram.event | Update id=266230366 is not handled. Duration 0 ms by bot id=8310053894
+2025-09-20 22:28:03,304 | INFO | aiogram.event | Update id=266230367 is not handled. Duration 0 ms by bot id=8310053894
+2025-09-20 22:28:07,954 | INFO | aiogram.event | Update id=266230368 is handled. Duration 381 ms by bot id=8310053894
+2025-09-20 22:28:24,451 | INFO | aiogram.event | Update id=266230369 is handled. Duration 157 ms by bot id=8310053894
+2025-09-20 22:36:30,634 | INFO | __main__ | Starting bot...
+2025-09-20 22:36:30,823 | INFO | aiogram.dispatcher | Start polling
+2025-09-20 22:36:31,124 | INFO | aiogram.dispatcher | Run polling for bot @my_tipo_test_bot id=8310053894 - 'my_tipo_test'
+2025-09-20 22:38:17,386 | INFO | aiogram.event | Update id=266230370 is handled. Duration 365 ms by bot id=8310053894
+2025-09-20 22:38:19,449 | INFO | aiogram.event | Update id=266230371 is not handled. Duration 141 ms by bot id=8310053894
+2025-09-20 22:38:19,449 | ERROR | aiogram.event | Cause exception while process update id=266230371 by bot id=8310053894
+TelegramBadRequest: Telegram server says - Bad Request: can't parse entities: Unsupported start tag "id" at byte offset 80
+Traceback (most recent call last):
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\dispatcher.py", line 309, in _process_update
+    response = await self.feed_update(bot, update, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\dispatcher.py", line 158, in feed_update
+    response = await self.update.wrap_outer_middleware(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\middlewares\error.py", line 25, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\middlewares\user_context.py", line 56, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\fsm\middleware.py", line 42, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\event\telegram.py", line 121, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\event\handler.py", line 43, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\dispatcher.py", line 276, in _listen_update
+    return await self.propagate_event(update_type=update_type, event=event, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\router.py", line 146, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\router.py", line 141, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        observer=observer, update_type=update_type, event=telegram_event, **data
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\router.py", line 174, in _propagate_event
+    response = await router.propagate_event(update_type=update_type, event=event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\router.py", line 146, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\router.py", line 141, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        observer=observer, update_type=update_type, event=telegram_event, **data
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\router.py", line 166, in _propagate_event
+    response = await observer.trigger(event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\event\telegram.py", line 121, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\dispatcher\event\handler.py", line 43, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\handlers\admin.py", line 12, in admin_entry
+    await message.answer("Админка: /admin_orders — последние заказы, /grant_admin <id> — выдать права")
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\methods\base.py", line 84, in emit
+    return await bot(self)
+           ^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\client\bot.py", line 485, in __call__
+    return await self.session(self, method, timeout=request_timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\client\session\base.py", line 254, in __call__
+    return cast(TelegramType, await middleware(bot, method))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\client\session\aiohttp.py", line 185, in make_request
+    response = self.check_response(
+        bot=bot, method=method, status_code=resp.status, content=raw_result
+    )
+  File "C:\telegram_bot\.venv\Lib\site-packages\aiogram\client\session\base.py", line 120, in check_response
+    raise TelegramBadRequest(method=method, message=description)
+aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: can't parse entities: Unsupported start tag "id" at byte offset 80
+2025-09-20 22:45:06,159 | INFO | aiogram.event | Update id=266230372 is not handled. Duration 1 ms by bot id=8310053894
+2025-09-20 22:45:11,244 | INFO | aiogram.event | Update id=266230373 is not handled. Duration 0 ms by bot id=8310053894

@@ -6,23 +6,35 @@ on:
 
 permissions:
   contents: write
-  issues: read
+  issues: write
 
 jobs:
   apply:
-    if: startsWith(github.event.comment.body, "/apply ")
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract file path and content
+      - name: Check trigger
+        id: check
         run: |
-          FILE=$(echo "${{ github.event.comment.body }}" | head -n1 | cut -d" " -f2)
+          BODY="${{ github.event.comment.body }}"
+          if [[ "$BODY" == /apply* ]]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+          else
+            echo "run=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract file path and content
+        if: steps.check.outputs.run == 'true'
+        run: |
+          BODY=$(printf "%s" "${{ github.event.comment.body }}" | tr -d '\r')
+          FILE=$(printf "%s" "$BODY" | head -n1 | awk '{print $2}')
           echo "Target file: $FILE"
-          echo "${{ github.event.comment.body }}" | sed "1d" | sed "/^```/d" > "$FILE"
+          mkdir -p "$(dirname "$FILE")"
+          printf "%s\n" "$BODY" | sed '1d' | sed '/^```/d' > "$FILE"
 
       - name: Commit changes
+        if: steps.check.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

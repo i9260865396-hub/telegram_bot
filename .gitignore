@@ -1,30 +1,30 @@
-# --- Python cache ---
+﻿# Python
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.so
+*.pdb
 
-# --- Virtual environments ---
+# Virtual environment
 .venv/
 env/
 venv/
 
-# --- IDE configs ---
+# VSCode / PyCharm
 .vscode/
 .idea/
 
-# --- Databases / local data ---
-bot.db
-*.sqlite3
-
-# --- Logs ---
+# Logs and databases
 *.log
+*.sqlite3
+*.db
 logs/
+bot.db
 
-# --- Environment files ---
+# Environment files
 .env
+*.env
 
-# --- System files ---
+# System files
 .DS_Store
 Thumbs.db

@@ -1,14 +1,12 @@
 import asyncio
 import logging
-import os
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from handlers import welcome, order, status, admin  # подключаем все нужные роутеры
 from config import settings
-
+from handlers import welcome, admin  # пока только нужные
 
 async def main():
     logging.basicConfig(
@@ -22,13 +20,11 @@ async def main():
     )
     dp = Dispatcher()
 
-    # Подключаем роутеры
+    # Подключаем только проверенные роутеры
     dp.include_router(welcome.router)
-    dp.include_router(order.router)
-    dp.include_router(status.router)
     dp.include_router(admin.router)
 
-    logging.info("Starting bot...")
+    logging.info("✅ Bot started")
     await dp.start_polling(bot)
 
 
@@ -36,4 +32,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logging.info("Bot stopped!")
+        logging.info("⛔ Bot stopped")

@@ -1,7 +1,8 @@
  
 Traceback (most recent call last):
-  File "C:\telegram_bot\app.py", line 8, in <module>
-    from database.migrate import run as migrate_run
-  File "C:\telegram_bot\database\migrate.py", line 2, in <module>
-    from database.db import engine, Base
-ImportError: cannot import name 'engine' from 'database.db' (C:\telegram_bot\database\db.py)
+  File "C:\telegram_bot\app.py", line 9, in <module>
+    from handlers import welcome, order, status, admin  # подключаем все нужные роутеры
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\telegram_bot\handlers\order.py", line 3, in <module>
+    from database.db import SessionLocal
+ImportError: cannot import name 'SessionLocal' from 'database.db' (C:\telegram_bot\database\db.py)

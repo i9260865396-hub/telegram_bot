@@ -1,23 +1,85 @@
+# handlers/order.py
 from aiogram import Router, F
-from aiogram.types import Message
-from database.db import SessionLocal
-from database.models import Order
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
 
-router = Router(name="order")
+router = Router()
 
-@router.message(F.text == "🆕 Новый заказ")
-async def order_start(message: Message):
-    await message.answer("Опишите, что нужно напечатать (одним сообщением):")
 
-# Любой обычный текст (не команда и не пункты меню) становится заказом
-@router.message(F.text & ~F.text.startswith("/") & (F.text != "🆕 Новый заказ") & (F.text != "📦 Статус заказа") & (F.text != "🛠 Админка"))
-async def capture_description(message: Message):
-    desc = message.text.strip()
-    if not desc:
-        return
-    async with SessionLocal() as session:
-        order = Order(user_id=message.from_user.id, description=desc, status="new")
-        session.add(order)
-        await session.commit()
-        await session.refresh(order)
-    await message.answer(f"✅ Заказ #{order.id} создан. Мы свяжемся с вами в чате.")
+# === Определяем состояния для оформления заказа ===
+class OrderFSM(StatesGroup):
+    choosing_product = State()
+    entering_quantity = State()
+    confirming = State()
+
+
+# === Клавиатуры ===
+main_menu_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Новый заказ")],
+        [KeyboardButton(text="Статус заказа")],
+    ],
+    resize_keyboard=True
+)
+
+cancel_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="❌ Отмена")]
+    ],
+    resize_keyboard=True
+)
+
+
+# === Старт нового заказа ===
+@router.message(F.text == "Новый заказ")
+async def start_order(message: Message, state: FSMContext):
+    await state.set_state(OrderFSM.choosing_product)
+    await message.answer(
+        "Что будем печатать? (листовки, буклеты, баннеры...)\n\n"
+        "Или нажмите ❌ Отмена",
+        reply_markup=cancel_kb
+    )
+
+
+# === Ввод названия продукта ===
+@router.message(OrderFSM.choosing_product, ~F.text.lower().contains("отмена"))
+async def choose_product(message: Message, state: FSMContext):
+    await state.update_data(product=message.text)
+    await state.set_state(OrderFSM.entering_quantity)
+    await message.answer("Укажите тираж (например: 1000 шт):")
+
+
+# === Ввод количества ===
+@router.message(OrderFSM.entering_quantity, ~F.text.lower().contains("отмена"))
+async def enter_quantity(message: Message, state: FSMContext):
+    await state.update_data(quantity=message.text)
+    data = await state.get_data()
+
+    await state.set_state(OrderFSM.confirming)
+    await message.answer(
+        f"Подтвердите заказ:\n"
+        f"📦 Продукт: {data['product']}\n"
+        f"🔢 Тираж: {data['quantity']}\n\n"
+        f"Если всё верно, напишите «Подтверждаю» или ❌ Отмена"
+    )
+
+
+# === Подтверждение ===
+@router.message(OrderFSM.confirming, F.text.lower() == "подтверждаю")
+async def confirm_order(message: Message, state: FSMContext):
+    data = await state.get_data()
+    await message.answer(
+        f"✅ Заказ принят!\n"
+        f"📦 {data['product']}\n"
+        f"🔢 {data['quantity']}",
+        reply_markup=main_menu_kb
+    )
+    await state.clear()
+
+
+# === Отмена на любом шаге ===
+@router.message(F.text.lower().contains("отмена"))
+async def cancel_order(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("❌ Заказ отменён", reply_markup=main_menu_kb)

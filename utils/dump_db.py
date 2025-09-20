@@ -1,18 +1,17 @@
-from database.db import get_admins, get_all_orders
+from database import db
 
-if __name__ == "__main__":
+def dump():
+    admins = db.get_admins()
+    orders = db.get_orders()
+
     print("=== ADMINS ===")
-    admins = get_admins()
-    if not admins:
-        print("Пока админов нет")
-    else:
-        for a in admins:
-            print({"user_id": a})
+    for admin in admins:
+        print(admin)
 
     print("\n=== ORDERS ===")
-    orders = get_all_orders()
-    if not orders:
-        print("Пока заказов нет")
-    else:
-        for o in orders:
-            print(o)
+    for order in orders:
+        print(order)
+
+
+if __name__ == "__main__":
+    dump()

@@ -1,19 +1,12 @@
 ﻿from aiogram import Router, types
 from aiogram.filters import Command
-from database.db import get_admins
+from config.settings import settings
 
 router = Router()
 
-
 @router.message(Command("admin"))
-async def admin_entry(message: types.Message):
-    if message.from_user.id not in get_admins():
-        await message.answer("вќЊ РЈ РІР°СЃ РЅРµС‚ РїСЂР°РІ РґРѕСЃС‚СѓРїР°")
+async def admin_panel(message: types.Message):
+    if message.from_user.id not in settings.get_admin_ids():
+        await message.answer("У тебя нет прав доступа")
         return
-
-    await message.answer(
-        "РђРґРјРёРЅРєР°:\n"
-        "/admin_orders вЂ” РїРѕСЃР»РµРґРЅРёРµ Р·Р°РєР°Р·С‹\n"
-        "/grant_admin ID вЂ” РІС‹РґР°С‚СЊ РїСЂР°РІР°"
-    )
-
+    await message.answer("Добро пожаловать в админ-панель!")

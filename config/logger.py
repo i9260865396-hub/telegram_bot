@@ -1,22 +1,32 @@
-import logging, sys
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
-from config.settings import settings
+import logging
+import sys
+from logging.handlers import TimedRotatingFileHandler
 
-def setup_logging():
-    Path("logs").mkdir(parents=True, exist_ok=True)
-    level = getattr(logging, settings.log_level.upper(), logging.INFO)
-    fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+# Настройка логирования
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-    root = logging.getLogger()
-    root.setLevel(level)
+# Формат логов
+formatter = logging.Formatter(
+    "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    "%Y-%m-%d %H:%M:%S"
+)
 
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(level)
-    ch.setFormatter(fmt)
-    root.addHandler(ch)
+# Лог в консоль
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
-    fh = RotatingFileHandler("logs/bot.log", maxBytes=2_000_000, backupCount=5, encoding="utf-8")
-    fh.setLevel(level)
-    fh.setFormatter(fmt)
-    root.addHandler(fh)
+# Лог в файл (ротация каждую минуту, хранить 10 файлов)
+file_handler = TimedRotatingFileHandler(
+    "bot.log",
+    when="M",             # "M" = минуты
+    interval=1,           # шаг = 1 минута
+    backupCount=10,       # хранить максимум 10 логов
+    encoding="utf-8",
+    delay=False
+)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+__all__ = ["logger"]

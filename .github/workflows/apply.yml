@@ -1,0 +1,31 @@
+﻿name: Apply edits from issue comments
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  apply:
+    if: startsWith(github.event.comment.body, "/apply ")
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract file path and content
+        run: |
+          FILE=$(echo "${{ github.event.comment.body }}" | head -n1 | cut -d" " -f2)
+          echo "Target file: $FILE"
+          echo "${{ github.event.comment.body }}" | sed "1d" | sed "/^```/d" > "$FILE"
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Applied fix from issue comment by ${{ github.event.comment.user.login }}"
+          git push origin HEAD:main

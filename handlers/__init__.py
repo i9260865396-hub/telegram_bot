@@ -1,1 +1,1 @@
-from . import welcome, admin, order, status
+from . import welcome, admin

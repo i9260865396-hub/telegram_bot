@@ -1,0 +1,4 @@
+This repository is configured for auto-apply patches.
+If you see this file in main, the auto-apply workflow works. ✅
+Source: patches/new/0000-test-autopatch.patch
+Timestamp: will be in commit metadata

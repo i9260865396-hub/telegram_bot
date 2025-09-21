@@ -1,0 +1,49 @@
+name: Auto-apply patches
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'patches/new/*.patch'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply incoming patches
+        shell: bash
+        run: |
+          set -e
+          shopt -s nullglob
+          mkdir -p patches/applied patches/failed
+          git config user.name  "Patch Bot"
+          git config user.email "patch-bot@users.noreply.github.com"
+
+          status=0
+          for f in patches/new/*.patch; do
+            echo "===> Applying $f"
+            if git apply --check "$f"; then
+              git apply --whitespace=fix "$f"
+              git add -A
+              msg="patch: apply $(basename "$f")"
+              git commit -m "$msg"
+              ts=$(date -u +%Y%m%d-%H%M%S)
+              mv "$f" "patches/applied/${ts}_$(basename "$f")"
+            else
+              echo "!! FAILED to apply $f"
+              ts=$(date -u +%Y%m%d-%H%M%S)
+              mv "$f" "patches/failed/${ts}_$(basename "$f")"
+              status=1
+            fi
+          done
+
+          git push || true
+          exit $status

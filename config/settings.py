@@ -1,20 +1,30 @@
-from pydantic_settings import BaseSettings
 from typing import List
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+def _split_ids(v: str | List[int] | None) -> List[int]:
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [int(x) for x in v]
+    raw = v.replace(";", ",").replace(" ", ",")
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    return [int(p) for p in parts]
 
 class Settings(BaseSettings):
-    bot_token: str
-    admin_ids: str  # строка из .env, например: "12345,67890"
-    database_url: str = "sqlite+aiosqlite:///./bot.db"
-    log_level: str = "INFO"
+    BOT_TOKEN: str
+    ADMIN_IDS: List[int] = []
 
-    def get_admin_ids(self) -> List[int]:
-        """
-        Возвращает список admin_ids как int[] из строки.
-        """
-        return [int(x.strip()) for x in self.admin_ids.split(",") if x.strip()]
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    @field_validator("ADMIN_IDS", mode="before")
+    @classmethod
+    def parse_admin_ids(cls, v):
+        return _split_ids(v)
 
 settings = Settings()

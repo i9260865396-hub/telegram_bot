@@ -1,22 +1,15 @@
 @echo off
-title Telegram Print Bot (autoupdate + autolog)
+cd /d C:\telegram_bot
 
 :loop
-echo [INFO] Проверяю обновления в GitHub...
-cd /d C:\telegram_bot
+echo ===============================
+echo [GIT PULL] %date% %time%
 git pull origin main
+echo [BOT START] %date% %time%
+echo ===============================
 
-echo [INFO] Очищаю старый лог...
-echo. > bot.log
+.\.venv\Scripts\python.exe app.py
 
-echo [INFO] Запускаю бота...
-.venv\Scripts\python.exe app.py >> bot.log 2>&1
-
-echo [INFO] Бот завершился. Сохраняю лог в GitHub...
-git add bot.log
-git commit -m "update bot.log" >nul 2>&1
-git push origin main
-
-echo [INFO] Жду 5 секунд перед новым запуском...
-timeout /t 5 >nul
+echo [BOT STOPPED] %date% %time%
+timeout /t 10 >nul
 goto loop

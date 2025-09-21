@@ -6,9 +6,9 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Логи (вообще все логи не храним)
-logs/
-*.log
+# Логи (все логи игнорим, кроме last_error.log)
+logs/*
+!logs/last_error.log
 
 # Секреты и настройки
 .env

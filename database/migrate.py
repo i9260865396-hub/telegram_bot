@@ -1,4 +1,10 @@
 import asyncio
+import sys
+from pathlib import Path
+
+if __package__ is None:
+    sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 from database.db import engine, Base
 from database import models  # noqa
 

@@ -1,8 +1,8 @@
 from config.settings import settings
-from database import db
+from database.sqlite_utils import add_admin
 
 
 def add():
     for admin_id in settings.admin_ids:
-        db.add_admin(admin_id)
+        add_admin(admin_id)
     print("✅ Админы добавлены из settings.admin_ids")

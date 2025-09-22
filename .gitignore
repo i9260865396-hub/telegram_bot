@@ -12,3 +12,11 @@ logs/*
 
 # Секреты и настройки
 .env
+
+.env
+bot.db
+*.sqlite
+*.sqlite3
+*.zip
+__pycache__/
+.venv/

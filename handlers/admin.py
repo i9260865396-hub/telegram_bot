@@ -1,20 +1,30 @@
-﻿from aiogram import Router, F
+from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-import os
 import logging
+
+from config.settings import settings
 
 router = Router(name="admin")
 
-def _parse_admin_ids():
-    """ADMIN_IDS в .env: 12345,67890 или 12345;67890"""
-    raw = os.getenv("ADMIN_IDS", "") or ""
-    raw = raw.replace(";", ",")
-    ids = [s.strip() for s in raw.split(",") if s.strip()]
-    return set(ids)
+
+def _get_admin_ids() -> set[int]:
+    if hasattr(settings, "get_admin_ids") and callable(settings.get_admin_ids):
+        admin_ids = settings.get_admin_ids()
+    else:
+        admin_ids = getattr(settings, "admin_ids", [])
+    normalized_ids: set[int] = set()
+    for admin_id in admin_ids:
+        try:
+            normalized_ids.add(int(admin_id))
+        except (TypeError, ValueError):
+            continue
+    return normalized_ids
+
 
 def is_admin_id(user_id: int) -> bool:
-    return str(user_id) in _parse_admin_ids()
+    return user_id in _get_admin_ids()
+
 
 def admin_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -23,6 +33,7 @@ def admin_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="💲 Цены",     callback_data="admin:prices")],
     ])
 
+
 @router.message(Command("admin"))
 async def admin_cmd(message: Message):
     if not is_admin_id(message.from_user.id):
@@ -30,9 +41,11 @@ async def admin_cmd(message: Message):
         return
     await message.answer("Админ-панель:", reply_markup=admin_kb())
 
+
 @router.message(F.text.func(lambda t: (t or "").lower().strip() in {"админ панель","админ-панель","admin"}))
 async def admin_text(message: Message):
     await admin_cmd(message)
+
 
 @router.callback_query(F.data.startswith("admin:"))
 async def admin_cb(call: CallbackQuery):

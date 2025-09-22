@@ -1,50 +1,74 @@
-﻿# handlers/admin.py
-from aiogram import Router, F
+﻿from aiogram import Router, types, F
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
+from sqlalchemy.future import select
+from database.base import async_session
+from database.models import Order, Service
 
-from config.settings import settings
-
-router = Router(name="admin")
-
-
-def is_admin_id(user_id: int) -> bool:
-    return user_id in settings.get_admin_ids()
+router = Router()
 
 
-def admin_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📦 Заказы", callback_data="admin:orders")],
-        [InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin:settings")],
-        [InlineKeyboardButton(text="💲 Цены", callback_data="admin:prices")],
-    ])
+# === FSM для изменения цены ===
+class PriceEdit(StatesGroup):
+    waiting_for_price = State()
 
 
-@router.message(Command("admin"))
-async def admin_cmd(message: Message):
-    if not is_admin_id(message.from_user.id):
-        await message.answer("⛔ Нет прав доступа.")
-        return
-    await message.answer("Админ-панель:", reply_markup=admin_kb())
+# === 💰 Цены (список услуг с кнопками) ===
+@router.message(lambda msg: msg.text == "💰 Цены")
+async def show_services(message: types.Message):
+    async with async_session() as session:
+        result = await session.execute(select(Service).order_by(Service.id))
+        services = result.scalars().all()
 
-
-@router.message(F.text.func(lambda t: (t or "").lower().strip() in {"админ панель", "админ-панель", "admin"}))
-async def admin_text(message: Message):
-    await admin_cmd(message)
-
-
-@router.callback_query(F.data.startswith("admin:"))
-async def admin_cb(call: CallbackQuery):
-    if not is_admin_id(call.from_user.id):
-        await call.answer("Нет прав", show_alert=True)
+    if not services:
+        await message.answer("❌ В базе пока нет услуг.")
         return
 
-    data = call.data
-    if data == "admin:orders":
-        await call.message.edit_text("Здесь будут последние заказы.\n\n(заглушка)")
-    elif data == "admin:settings":
-        await call.message.edit_text("Здесь будут настройки.\n\n(заглушка)")
-    elif data == "admin:prices":
-        await call.message.edit_text("Здесь будет редактор цен.\n\n(заглушка)")
-    else:
-        await call.answer()
+    for s in services:
+        status = "✅ вкл" if s.is_active else "❌ выкл"
+        kb = types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [types.InlineKeyboardButton(text="✏ Изменить цену", callback_data=f"edit_price:{s.id}")]
+            ]
+        )
+        await message.answer(
+            f"• {s.name} — {s.price} руб. ({status})",
+            reply_markup=kb
+        )
+
+
+# === Обработка кнопки "✏ Изменить цену" ===
+@router.callback_query(F.data.startswith("edit_price:"))
+async def ask_new_price(callback: types.CallbackQuery, state: FSMContext):
+    service_id = int(callback.data.split(":")[1])
+    await state.update_data(service_id=service_id)
+    await state.set_state(PriceEdit.waiting_for_price)
+    await callback.message.answer("Введите новую цену для этой услуги:")
+    await callback.answer()
+
+
+# === Приём новой цены ===
+@router.message(PriceEdit.waiting_for_price, F.text.regexp(r"^\d+(\.\d+)?$"))
+async def save_new_price(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    service_id = data["service_id"]
+    new_price = float(message.text)
+
+    async with async_session() as session:
+        result = await session.execute(select(Service).where(Service.id == service_id))
+        service = result.scalar_one_or_none()
+        if service:
+            service.price = new_price
+            await session.commit()
+            await message.answer(f"✅ Цена изменена: {service.name} — {service.price} руб.")
+        else:
+            await message.answer("❌ Ошибка: услуга не найдена.")
+
+    await state.clear()
+
+
+# === Если ввели не число ===
+@router.message(PriceEdit.waiting_for_price)
+async def wrong_price_input(message: types.Message):
+    await message.answer("❗ Введите корректное число (например: 15 или 15.5)")

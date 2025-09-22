@@ -1,12 +1,25 @@
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, func
+from sqlalchemy import Column, Integer, String, Boolean, Float, DateTime, func, BigInteger
 from database.base import Base
 
 
+# === Таблица заказов ===
 class Order(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(BigInteger, nullable=False)        # Telegram ID пользователя
-    description = Column(String(4096), nullable=False)  # описание заказа (например "100 листовок А6")
-    status = Column(String(64), default="new")          # new / in_progress / done
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    user_id = Column(BigInteger, nullable=False)
+    description = Column(String(4096), nullable=False)
+    status = Column(String(64), default="new")
+    created_at = Column(DateTime, default=func.now())
+
+
+# === Таблица услуг ===
+class Service(Base):
+    __tablename__ = "services"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)          # название услуги
+    price = Column(Float, nullable=False, default=0)    # цена
+    unit = Column(String(50), nullable=False, default="шт.")  # единица измерения (шт., м², м)
+    min_qty = Column(Integer, nullable=False, default=1)      # минимальное количество
+    is_active = Column(Boolean, default=True)           # доступность

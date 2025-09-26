@@ -1,7 +1,12 @@
 from sqlalchemy import Column, Integer, String, Boolean, Float, DateTime, func, BigInteger
 from database.base import Base
+from sqlalchemy.orm import Mapped, mapped_column
+from database.base import Base
 
+class Admin(Base):
+    __tablename__ = "admins"
 
+    user_id: Mapped[int] = mapped_column(primary_key=True)
 # === Таблица заказов ===
 class Order(Base):
     __tablename__ = "orders"

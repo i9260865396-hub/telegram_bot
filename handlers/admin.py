@@ -1,25 +1,22 @@
-﻿from aiogram import Router, types, F
+﻿# handlers/admin.py
+from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import select, update
+from sqlalchemy import select
 from database.base import async_session
-from database.models import Order, Service
-from config.settings import settings
+from database.models import Order, Service, Admin
 
 router = Router()
-
 
 # =======================
 #   helpers / keyboards
 # =======================
 
-def is_admin(user_id: int) -> bool:
-    try:
-        return user_id in settings.get_admin_ids()
-    except Exception:
-        return False
-
+async def is_admin(user_id: int) -> bool:
+    async with async_session() as session:
+        res = await session.execute(select(Admin.user_id).where(Admin.user_id == user_id))
+        return res.scalar_one_or_none() is not None
 
 def admin_main_kb() -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(
@@ -31,9 +28,7 @@ def admin_main_kb() -> types.ReplyKeyboardMarkup:
         resize_keyboard=True
     )
 
-
 def settings_kb() -> types.ReplyKeyboardMarkup:
-    # компактное меню настроек (как договорились)
     return types.ReplyKeyboardMarkup(
         keyboard=[
             [types.KeyboardButton(text="💰 Цены / Услуги")],
@@ -46,23 +41,20 @@ def settings_kb() -> types.ReplyKeyboardMarkup:
         resize_keyboard=True
     )
 
-
+# ---- Услуги ----
 def services_list_kb(items: list[Service]) -> types.InlineKeyboardMarkup:
-    # строим inline-клавиатуру: по 2 кнопки в ряд
     rows: list[list[types.InlineKeyboardButton]] = []
     line: list[types.InlineKeyboardButton] = []
     for svc in items:
         btn = types.InlineKeyboardButton(text=svc.name, callback_data=f"svc:open:{svc.id}")
         line.append(btn)
         if len(line) == 2:
-            rows.append(line)
-            line = []
+            rows.append(line); line = []
     if line:
         rows.append(line)
-    # низ — назад
-    rows.append([types.InlineKeyboardButton(text="🔙 Назад", callback_data="svc:back")])
+    rows.append([types.InlineKeyboardButton(text="➕ Добавить услугу", callback_data="svc:add")])
+    rows.append([types.InlineKeyboardButton(text="🔙 Назад в настройки", callback_data="svc:back")])
     return types.InlineKeyboardMarkup(inline_keyboard=rows)
-
 
 def service_card_text(s: Service) -> str:
     status = "✅ активна" if s.is_active else "❌ выключена"
@@ -73,7 +65,6 @@ def service_card_text(s: Service) -> str:
         f"Статус: {status}"
     )
 
-
 def service_card_kb(svc_id: int, is_active: bool) -> types.InlineKeyboardMarkup:
     toggle_text = "🔴 Выключить" if is_active else "🟢 Включить"
     return types.InlineKeyboardMarkup(
@@ -82,31 +73,19 @@ def service_card_kb(svc_id: int, is_active: bool) -> types.InlineKeyboardMarkup:
             [types.InlineKeyboardButton(text="🔢 Изменить минималку", callback_data=f"svc:ask_min:{svc_id}")],
             [types.InlineKeyboardButton(text="📏 Единица (шт./м/м²)", callback_data=f"svc:ask_unit:{svc_id}")],
             [types.InlineKeyboardButton(text=toggle_text, callback_data=f"svc:toggle:{svc_id}")],
+            [types.InlineKeyboardButton(text="❌ Удалить услугу", callback_data=f"svc:delete:{svc_id}")],
             [types.InlineKeyboardButton(text="🔙 К списку услуг", callback_data="svc:list")],
         ]
     )
 
-
-# единицы измерения (код -> человекочитаемое)
-UNIT_OPTIONS = {
-    "pcs": "шт.",
-    "m": "м",
-    "m2": "м²",
-}
-
+UNIT_OPTIONS = {"pcs": "шт.", "m": "м", "m2": "м²"}
 
 def units_kb(svc_id: int) -> types.InlineKeyboardMarkup:
     row = [
         types.InlineKeyboardButton(text=label, callback_data=f"svc:set_unit:{svc_id}:{code}")
         for code, label in UNIT_OPTIONS.items()
     ]
-    return types.InlineKeyboardMarkup(
-        inline_keyboard=[
-            row,
-            [types.InlineKeyboardButton(text="🔙 Назад", callback_data=f"svc:open:{svc_id}")]
-        ]
-    )
-
+    return types.InlineKeyboardMarkup(inline_keyboard=[row, [types.InlineKeyboardButton(text="🔙 Назад", callback_data=f"svc:open:{svc_id}")]])
 
 # =======================
 #          FSM
@@ -115,10 +94,14 @@ def units_kb(svc_id: int) -> types.InlineKeyboardMarkup:
 class PriceEdit(StatesGroup):
     waiting_for_price = State()
 
-
 class MinQtyEdit(StatesGroup):
     waiting_for_min = State()
 
+class AddService(StatesGroup):
+    waiting_for_name = State()
+    waiting_for_price = State()
+    waiting_for_unit = State()
+    waiting_for_min = State()
 
 # =======================
 #       /admin & menu
@@ -126,314 +109,264 @@ class MinQtyEdit(StatesGroup):
 
 @router.message(Command("admin"))
 async def admin_menu(message: types.Message):
-    if not is_admin(message.from_user.id):
-        await message.answer("⛔ У вас нет доступа.")
-        return
+    if not await is_admin(message.from_user.id):
+        await message.answer("⛔ У вас нет доступа."); return
     await message.answer("Админ-панель:", reply_markup=admin_main_kb())
-
 
 @router.message(F.text == "🚪 Отмена")
 async def cancel_action(message: types.Message, state: FSMContext):
     await state.clear()
-    if not is_admin(message.from_user.id):
-        return
+    if not await is_admin(message.from_user.id): return
     await message.answer("Действие отменено. Возврат в админку.", reply_markup=admin_main_kb())
-
 
 @router.message(F.text == "⚙ Настройки")
 async def settings_menu(message: types.Message):
-    if not is_admin(message.from_user.id):
-        await message.answer("⛔ У вас нет доступа.")
-        return
+    if not await is_admin(message.from_user.id):
+        await message.answer("⛔ У вас нет доступа."); return
     await message.answer("Раздел настроек:", reply_markup=settings_kb())
 
+# =======================
+#   Новые разделы меню
+# =======================
+
+@router.message(F.text == "⏰ Сроки")
+async def deadlines_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("📅 Раздел «Сроки» (заглушка)", reply_markup=settings_kb())
+
+@router.message(F.text == "📦 Доставка")
+async def delivery_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("🚚 Раздел «Доставка» (заглушка)", reply_markup=settings_kb())
+
+@router.message(F.text == "👨‍💻 Админы")
+async def admins_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("👨‍💻 Раздел «Админы» (заглушка)", reply_markup=settings_kb())
+
+@router.message(F.text == "🤖 Инструменты ИИ")
+async def ai_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("🤖 Раздел «Инструменты ИИ» (заглушка)", reply_markup=settings_kb())
+
+@router.message(F.text == "📢 Уведомления")
+async def notifications_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("🔔 Раздел «Уведомления» (заглушка)", reply_markup=settings_kb())
+
+@router.message(F.text == "📊 Статистика")
+async def stats_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("📊 Раздел «Статистика» (заглушка)", reply_markup=settings_kb())
+
+@router.message(F.text == "📂 Архив заказов")
+async def archive_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("📂 Раздел «Архив заказов» (заглушка)", reply_markup=settings_kb())
+
+@router.message(F.text == "⚡ Системные параметры")
+async def system_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("⚙ Раздел «Системные параметры» (заглушка)", reply_markup=settings_kb())
+
+@router.message(F.text == "🔑 API")
+async def api_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("🔑 Раздел «API» (заглушка)", reply_markup=settings_kb())
 
 @router.message(F.text == "🔙 Назад")
-async def back_to_admin(message: types.Message, state: FSMContext):
-    await state.clear()
-    if not is_admin(message.from_user.id):
-        return
-    await message.answer("Админ-панель:", reply_markup=admin_main_kb())
-
+async def back_to_admin(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("Возврат в админку:", reply_markup=admin_main_kb())
 
 # =======================
-#         Заказы
+#   Заказы
 # =======================
 
 @router.message(F.text == "📦 Заказы")
 async def show_orders(message: types.Message):
-    if not is_admin(message.from_user.id):
-        await message.answer("⛔ У вас нет доступа.")
-        return
+    if not await is_admin(message.from_user.id):
+        await message.answer("⛔ У вас нет доступа."); return
     async with async_session() as session:
-        result = await session.execute(select(Order).order_by(Order.created_at.desc()).limit(5))
-        orders = result.scalars().all()
-
-    if not orders:
-        await message.answer("📦 Заказов пока нет.")
-        return
-
+        res = await session.execute(select(Order).order_by(Order.created_at.desc()).limit(5))
+        orders = res.scalars().all()
+    if not orders: await message.answer("📦 Заказов пока нет."); return
     text = "📋 Последние заказы:\n\n"
-    for o in orders:
-        text += f"#{o.id} — {o.description}\nСтатус: {o.status}\n\n"
+    for o in orders: text += f"#{o.id} — {o.description}\nСтатус: {o.status}\n\n"
     await message.answer(text)
-
-
 # =======================
-#   Цены / Услуги (список)
+#   Инструменты ИИ
 # =======================
 
-@router.message(F.text == "💰 Цены / Услуги")
-async def services_list(message: types.Message):
-    if not is_admin(message.from_user.id):
-        await message.answer("⛔ У вас нет доступа.")
-        return
-    async with async_session() as session:
-        result = await session.execute(select(Service).order_by(Service.id))
-        services = result.scalars().all()
+from config.settings import settings  # добавь в импорт вверху файла
 
-    if not services:
-        await message.answer("❌ В базе пока нет услуг.")
-        return
-
-    # одно сообщение + inline-кнопки
-    lines = ["📋 Услуги:"]
-    for s in services:
-        lines.append(f"• {s.name} — {s.price} руб./{s.unit} (мин. {s.min_qty})")
-    text = "\n".join(lines)
-
-    await message.answer(text, reply_markup=services_list_kb(services))
-
-
-# Показ карточки услуги
-@router.callback_query(F.data.startswith("svc:open:"))
-async def open_service(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    svc_id = int(callback.data.split(":")[2])
-    async with async_session() as session:
-        res = await session.execute(select(Service).where(Service.id == svc_id))
-        svc = res.scalar_one_or_none()
-    if not svc:
-        await callback.answer("Услуга не найдена", show_alert=True)
-        return
-
-    await callback.message.edit_text(
-        service_card_text(svc),
-        reply_markup=service_card_kb(svc.id, svc.is_active),
-        parse_mode="HTML"
+def ai_tools_kb() -> types.InlineKeyboardMarkup:
+    status = "🟢 Включен" if settings.AI_ENABLED else "🔴 Выключен"
+    toggle_text = "Выключить" if settings.AI_ENABLED else "Включить"
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [types.InlineKeyboardButton(text=status, callback_data="ai:noop")],
+            [types.InlineKeyboardButton(text=f"🔁 {toggle_text}", callback_data="ai:toggle")],
+            [types.InlineKeyboardButton(text="🔙 Назад", callback_data="ai:back")]
+        ]
     )
-    await callback.answer()
 
+@router.message(F.text == "🤖 Инструменты ИИ")
+async def ai_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer(
+        f"🤖 Раздел «Инструменты ИИ»\n\nТекущее состояние: {'включен ✅' if settings.AI_ENABLED else 'выключен ❌'}",
+        reply_markup=ai_tools_kb()
+    )
 
-# Вернуться к списку услуг
-@router.callback_query(F.data == "svc:list")
-async def back_to_list(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    async with async_session() as session:
-        result = await session.execute(select(Service).order_by(Service.id))
-        services = result.scalars().all()
-    if not services:
-        await callback.message.edit_text("❌ В базе пока нет услуг.")
-        await callback.answer()
-        return
+@router.callback_query(F.data == "ai:toggle")
+async def ai_toggle(callback: types.CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True); return
+    # переключаем флаг
+    settings.AI_ENABLED = not settings.AI_ENABLED
+    await callback.message.edit_text(
+        f"🤖 Раздел «Инструменты ИИ»\n\nТекущее состояние: {'включен ✅' if settings.AI_ENABLED else 'выключен ❌'}",
+        reply_markup=ai_tools_kb()
+    )
+    await callback.answer("Изменено")
 
-    lines = ["📋 Услуги:"]
-    for s in services:
-        lines.append(f"• {s.name} — {s.price} руб./{s.unit} (мин. {s.min_qty})")
-    text = "\n".join(lines)
-
-    await callback.message.edit_text(text, reply_markup=services_list_kb(services))
-    await callback.answer()
-
-
-# Назад из списка (к настройкам)
-@router.callback_query(F.data == "svc:back")
-async def list_back(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    # вместо отдельного сообщения — просто отвечаем и просим нажать «🔙 Назад» в клавиатуре
-    await callback.message.edit_text("Раздел настроек:", reply_markup=None)
-    # отправим новое сообщение с reply-клавиатурой настроек
+@router.callback_query(F.data == "ai:back")
+async def ai_back(callback: types.CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True); return
     await callback.message.answer("Раздел настроек:", reply_markup=settings_kb())
     await callback.answer()
 
-
-# =======================
-#     Тоггл активности
-# =======================
-
-@router.callback_query(F.data.startswith("svc:toggle:"))
-async def toggle_service(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    svc_id = int(callback.data.split(":")[2])
-
-    async with async_session() as session:
-        res = await session.execute(select(Service).where(Service.id == svc_id))
-        svc = res.scalar_one_or_none()
-        if not svc:
-            await callback.answer("Услуга не найдена", show_alert=True)
-            return
-        new_val = not svc.is_active
-        await session.execute(
-            update(Service).where(Service.id == svc_id).values(is_active=new_val)
-        )
-        await session.commit()
-        svc.is_active = new_val  # для обновлённой карточки
-
-    await callback.message.edit_text(
-        service_card_text(svc),
-        reply_markup=service_card_kb(svc.id, svc.is_active),
-        parse_mode="HTML"
-    )
-    await callback.answer("Готово")
-
-
-# =======================
-#     Изменение цены
-# =======================
-
-@router.callback_query(F.data.startswith("svc:ask_price:"))
-async def ask_price(callback: types.CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    svc_id = int(callback.data.split(":")[2])
-    await state.update_data(service_id=svc_id)
-    await state.set_state(PriceEdit.waiting_for_price)
+@router.callback_query(F.data == "ai:noop")
+async def ai_noop(callback: types.CallbackQuery):
     await callback.answer()
-    await callback.message.answer("Введите новую цену (число, например 15 или 15.5):")
 
+# =======================
+#   Новые разделы
+# =======================
 
-@router.message(PriceEdit.waiting_for_price, F.text.regexp(r"^\d+(\.\d+)?$"))
-async def save_price(message: types.Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
-        return
-    data = await state.get_data()
-    svc_id = int(data["service_id"])
-    new_price = float(message.text)
+from config.settings import settings
 
-    async with async_session() as session:
-        res = await session.execute(select(Service).where(Service.id == svc_id))
-        svc = res.scalar_one_or_none()
-        if not svc:
-            await message.answer("❌ Услуга не найдена.")
-            await state.clear()
-            return
-        await session.execute(update(Service).where(Service.id == svc_id).values(price=new_price))
-        await session.commit()
-        svc.price = new_price
+# --- Сроки ---
+@router.message(F.text == "⏰ Сроки")
+async def deadlines_section(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id): return
+    await state.set_state("waiting_for_deadline")
+    await message.answer(f"📅 Текущий cut-off: {settings.WORKDAY_END_HOUR}:00\nВведите новое время (час 0-23):")
 
-    await message.answer(f"✅ Цена обновлена: {svc.name} — {svc.price} руб./{svc.unit}")
+@router.message(F.state == "waiting_for_deadline")
+async def deadlines_update(message: types.Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("Введите число (0-23)."); return
+    hour = int(message.text)
+    if hour < 0 or hour > 23:
+        await message.answer("Часы должны быть 0-23."); return
+    settings.WORKDAY_END_HOUR = hour
     await state.clear()
+    await message.answer(f"✅ Cut-off обновлён: {hour}:00", reply_markup=settings_kb())
 
+# --- Доставка ---
+@router.message(F.text == "📦 Доставка")
+async def delivery_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("🚚 Раздел «Доставка». Пока без настроек.", reply_markup=settings_kb())
 
-@router.message(PriceEdit.waiting_for_price)
-async def wrong_price(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return
-    await message.answer("❗ Введите корректное число (пример: 12 или 12.5)")
-
-
-# =======================
-#   Изменение минималки
-# =======================
-
-@router.callback_query(F.data.startswith("svc:ask_min:"))
-async def ask_min(callback: types.CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    svc_id = int(callback.data.split(":")[2])
-    await state.update_data(service_id=svc_id)
-    await state.set_state(MinQtyEdit.waiting_for_min)
-    await callback.answer()
-    await callback.message.answer("Введите минимальный тираж (целое число, например 100):")
-
-
-@router.message(MinQtyEdit.waiting_for_min, F.text.regexp(r"^\d+$"))
-async def save_min(message: types.Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
-        return
-    data = await state.get_data()
-    svc_id = int(data["service_id"])
-    new_min = int(message.text)
-
+# --- Админы ---
+@router.message(F.text == "👨‍💻 Админы")
+async def admins_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
     async with async_session() as session:
-        res = await session.execute(select(Service).where(Service.id == svc_id))
-        svc = res.scalar_one_or_none()
-        if not svc:
-            await message.answer("❌ Услуга не найдена.")
-            await state.clear()
-            return
-        await session.execute(update(Service).where(Service.id == svc_id).values(min_qty=new_min))
-        await session.commit()
-        svc.min_qty = new_min
+        res = await session.execute(select(Admin))
+        admins = res.scalars().all()
+    text = "👨‍💻 Список админов:\n" + "\n".join(str(a.user_id) for a in admins)
+    await message.answer(text if admins else "Пока нет админов.", reply_markup=settings_kb())
 
-    await message.answer(f"✅ Минимальный тираж обновлён: {svc.name} — мин. {svc.min_qty}")
-    await state.clear()
-
-
-@router.message(MinQtyEdit.waiting_for_min)
-async def wrong_min(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return
-    await message.answer("❗ Нужно целое число (например 100)")
-
-
-# =======================
-#   Изменение единицы
-# =======================
-
-@router.callback_query(F.data.startswith("svc:ask_unit:"))
-async def ask_unit(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    svc_id = int(callback.data.split(":")[2])
-    await callback.message.answer("Выберите единицу измерения:", reply_markup=units_kb(svc_id))
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("svc:set_unit:"))
-async def set_unit(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    _, _, svc_id_str, unit_code = callback.data.split(":")
-    svc_id = int(svc_id_str)
-    unit_value = UNIT_OPTIONS.get(unit_code, "шт.")
-
-    async with async_session() as session:
-        res = await session.execute(select(Service).where(Service.id == svc_id))
-        svc = res.scalar_one_or_none()
-        if not svc:
-            await callback.answer("Услуга не найдена", show_alert=True)
-            return
-        await session.execute(update(Service).where(Service.id == svc_id).values(unit=unit_value))
-        await session.commit()
-        svc.unit = unit_value
-
-    # после смены единицы — вернёмся в карточку
-    await callback.message.edit_text(
-        service_card_text(svc),
-        reply_markup=service_card_kb(svc.id, svc.is_active),
-        parse_mode="HTML"
+# --- Инструменты ИИ ---
+def ai_tools_kb() -> types.InlineKeyboardMarkup:
+    status = "🟢 Включен" if settings.AI_ENABLED else "🔴 Выключен"
+    toggle_text = "Выключить" if settings.AI_ENABLED else "Включить"
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [types.InlineKeyboardButton(text=status, callback_data="ai:noop")],
+            [types.InlineKeyboardButton(text=f"🔁 {toggle_text}", callback_data="ai:toggle")],
+            [types.InlineKeyboardButton(text="🔙 Назад", callback_data="ai:back")]
+        ]
     )
-    await callback.answer("Готово")
 
+@router.message(F.text == "🤖 Инструменты ИИ")
+async def ai_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer(
+        f"🤖 Раздел «Инструменты ИИ»\nТекущее состояние: {'включен ✅' if settings.AI_ENABLED else 'выключен ❌'}",
+        reply_markup=ai_tools_kb()
+    )
 
-# =======================
-#  Фоллбек (чтобы не молчал)
-# =======================
+@router.callback_query(F.data == "ai:toggle")
+async def ai_toggle(callback: types.CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True); return
+    settings.AI_ENABLED = not settings.AI_ENABLED
+    await callback.message.edit_text(
+        f"🤖 Раздел «Инструменты ИИ»\nТекущее состояние: {'включен ✅' if settings.AI_ENABLED else 'выключен ❌'}",
+        reply_markup=ai_tools_kb()
+    )
+    await callback.answer("Изменено")
 
-@router.message()
-async def fallback_admin(message: types.Message):
-    if is_admin(message.from_user.id) and message.text:
-        await message.answer("❗ Используй кнопки меню для навигации.")
+@router.callback_query(F.data == "ai:back")
+async def ai_back(callback: types.CallbackQuery):
+    await callback.message.answer("Раздел настроек:", reply_markup=settings_kb())
+    await callback.answer()
+
+@router.callback_query(F.data == "ai:noop")
+async def ai_noop(callback: types.CallbackQuery):
+    await callback.answer()
+
+# --- Уведомления ---
+@router.message(F.text == "📢 Уведомления")
+async def notifications_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    settings.NOTIFY_ENABLED = not settings.NOTIFY_ENABLED
+    await message.answer(f"🔔 Уведомления: {'включены ✅' if settings.NOTIFY_ENABLED else 'выключены ❌'}", reply_markup=settings_kb())
+
+# --- Статистика ---
+@router.message(F.text == "📊 Статистика")
+async def stats_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    async with async_session() as session:
+        total_orders = (await session.execute(select(Order))).scalars().all()
+        total_services = (await session.execute(select(Service))).scalars().all()
+    await message.answer(f"📊 Статистика:\nЗаказов: {len(total_orders)}\nУслуг: {len(total_services)}", reply_markup=settings_kb())
+
+# --- Архив ---
+@router.message(F.text == "📂 Архив заказов")
+async def archive_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    async with async_session() as session:
+        res = await session.execute(select(Order).where(Order.status == "done").limit(5))
+        items = res.scalars().all()
+    if not items:
+        await message.answer("📂 Архив пуст.", reply_markup=settings_kb()); return
+    text = "📦 Последние завершённые заказы:\n\n"
+    for o in items:
+        text += f"#{o.id} — {o.description}\n\n"
+    await message.answer(text, reply_markup=settings_kb())
+
+# --- Системные параметры ---
+@router.message(F.text == "⚡ Системные параметры")
+async def system_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer(
+        f"⚙ Системные параметры:\n"
+        f"Таймзона: {settings.TIMEZONE}\n"
+        f"Cut-off: {settings.WORKDAY_END_HOUR}:00\n"
+        f"AI: {'on' if settings.AI_ENABLED else 'off'}\n"
+        f"Уведомления: {'on' if settings.NOTIFY_ENABLED else 'off'}",
+        reply_markup=settings_kb()
+    )
+
+# --- API ---
+@router.message(F.text == "🔑 API")
+async def api_section(message: types.Message):
+    if not await is_admin(message.from_user.id): return
+    await message.answer("🔑 Раздел «API». Тут будут ключи/интеграции.", reply_markup=settings_kb())

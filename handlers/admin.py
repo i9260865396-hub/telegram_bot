@@ -4,6 +4,9 @@ from aiogram.filters import Command
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from sqlalchemy import select
+
+from config.settings import settings
+
 from database.base import async_session
 from database.models import Order, Service, Admin
 
@@ -103,6 +106,8 @@ class AddService(StatesGroup):
     waiting_for_unit = State()
     waiting_for_min = State()
 
+class DeadlinesEdit(StatesGroup):
+    waiting_for_deadline = State()
 # =======================
 #       /admin & menu
 # =======================
@@ -125,59 +130,28 @@ async def settings_menu(message: types.Message):
         await message.answer("⛔ У вас нет доступа."); return
     await message.answer("Раздел настроек:", reply_markup=settings_kb())
 
-# =======================
-#   Новые разделы меню
-# =======================
-
-@router.message(F.text == "⏰ Сроки")
-async def deadlines_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("📅 Раздел «Сроки» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "📦 Доставка")
-async def delivery_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("🚚 Раздел «Доставка» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "👨‍💻 Админы")
-async def admins_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("👨‍💻 Раздел «Админы» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "🤖 Инструменты ИИ")
-async def ai_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("🤖 Раздел «Инструменты ИИ» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "📢 Уведомления")
-async def notifications_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("🔔 Раздел «Уведомления» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "📊 Статистика")
-async def stats_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("📊 Раздел «Статистика» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "📂 Архив заказов")
-async def archive_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("📂 Раздел «Архив заказов» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "⚡ Системные параметры")
-async def system_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("⚙ Раздел «Системные параметры» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "🔑 API")
-async def api_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("🔑 Раздел «API» (заглушка)", reply_markup=settings_kb())
-
 @router.message(F.text == "🔙 Назад")
 async def back_to_admin(message: types.Message):
     if not await is_admin(message.from_user.id): return
     await message.answer("Возврат в админку:", reply_markup=admin_main_kb())
+
+@router.message(F.text == "⏰ Сроки")
+async def deadlines_section(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id): return
+    await state.set_state(DeadlinesEdit.waiting_for_deadline)
+    await message.answer(f"📅 Текущий cut-off: {settings.WORKDAY_END_HOUR}:00\nВведите новое время (0-23):")
+
+@router.message(DeadlinesEdit.waiting_for_deadline)
+async def deadlines_update(message: types.Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("Введите число (0-23)."); return
+    hour = int(message.text)
+    if hour < 0 or hour > 23:
+        await message.answer("Часы должны быть 0-23."); return
+    settings.WORKDAY_END_HOUR = hour
+    await state.clear()
+    await message.answer(f"✅ Cut-off обновлён: {hour}:00", reply_markup=settings_kb())
+
 
 # =======================
 #   Заказы
@@ -194,11 +168,21 @@ async def show_orders(message: types.Message):
     text = "📋 Последние заказы:\n\n"
     for o in orders: text += f"#{o.id} — {o.description}\nСтатус: {o.status}\n\n"
     await message.answer(text)
+
+@router.message(F.text == "💰 Цены / Услуги")
+async def services_root(message: types.Message):
+    if not await is_admin(message.from_user.id):
+        await message.answer("⛔ У вас нет доступа."); return
+    async with async_session() as session:
+        res = await session.execute(select(Service).order_by(Service.id))
+        items = res.scalars().all()
+    if not items:
+        await message.answer("Пока нет ни одной услуги."); return
+    await message.answer("Выберите услугу:", reply_markup=services_list_kb(items))
+
 # =======================
 #   Инструменты ИИ
 # =======================
-
-from config.settings import settings  # добавь в импорт вверху файла
 
 def ai_tools_kb() -> types.InlineKeyboardMarkup:
     status = "🟢 Включен" if settings.AI_ENABLED else "🔴 Выключен"
@@ -246,26 +230,6 @@ async def ai_noop(callback: types.CallbackQuery):
 #   Новые разделы
 # =======================
 
-from config.settings import settings
-
-# --- Сроки ---
-@router.message(F.text == "⏰ Сроки")
-async def deadlines_section(message: types.Message, state: FSMContext):
-    if not await is_admin(message.from_user.id): return
-    await state.set_state("waiting_for_deadline")
-    await message.answer(f"📅 Текущий cut-off: {settings.WORKDAY_END_HOUR}:00\nВведите новое время (час 0-23):")
-
-@router.message(F.state == "waiting_for_deadline")
-async def deadlines_update(message: types.Message, state: FSMContext):
-    if not message.text.isdigit():
-        await message.answer("Введите число (0-23)."); return
-    hour = int(message.text)
-    if hour < 0 or hour > 23:
-        await message.answer("Часы должны быть 0-23."); return
-    settings.WORKDAY_END_HOUR = hour
-    await state.clear()
-    await message.answer(f"✅ Cut-off обновлён: {hour}:00", reply_markup=settings_kb())
-
 # --- Доставка ---
 @router.message(F.text == "📦 Доставка")
 async def delivery_section(message: types.Message):
@@ -281,46 +245,6 @@ async def admins_section(message: types.Message):
         admins = res.scalars().all()
     text = "👨‍💻 Список админов:\n" + "\n".join(str(a.user_id) for a in admins)
     await message.answer(text if admins else "Пока нет админов.", reply_markup=settings_kb())
-
-# --- Инструменты ИИ ---
-def ai_tools_kb() -> types.InlineKeyboardMarkup:
-    status = "🟢 Включен" if settings.AI_ENABLED else "🔴 Выключен"
-    toggle_text = "Выключить" if settings.AI_ENABLED else "Включить"
-    return types.InlineKeyboardMarkup(
-        inline_keyboard=[
-            [types.InlineKeyboardButton(text=status, callback_data="ai:noop")],
-            [types.InlineKeyboardButton(text=f"🔁 {toggle_text}", callback_data="ai:toggle")],
-            [types.InlineKeyboardButton(text="🔙 Назад", callback_data="ai:back")]
-        ]
-    )
-
-@router.message(F.text == "🤖 Инструменты ИИ")
-async def ai_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer(
-        f"🤖 Раздел «Инструменты ИИ»\nТекущее состояние: {'включен ✅' if settings.AI_ENABLED else 'выключен ❌'}",
-        reply_markup=ai_tools_kb()
-    )
-
-@router.callback_query(F.data == "ai:toggle")
-async def ai_toggle(callback: types.CallbackQuery):
-    if not await is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True); return
-    settings.AI_ENABLED = not settings.AI_ENABLED
-    await callback.message.edit_text(
-        f"🤖 Раздел «Инструменты ИИ»\nТекущее состояние: {'включен ✅' if settings.AI_ENABLED else 'выключен ❌'}",
-        reply_markup=ai_tools_kb()
-    )
-    await callback.answer("Изменено")
-
-@router.callback_query(F.data == "ai:back")
-async def ai_back(callback: types.CallbackQuery):
-    await callback.message.answer("Раздел настроек:", reply_markup=settings_kb())
-    await callback.answer()
-
-@router.callback_query(F.data == "ai:noop")
-async def ai_noop(callback: types.CallbackQuery):
-    await callback.answer()
 
 # --- Уведомления ---
 @router.message(F.text == "📢 Уведомления")

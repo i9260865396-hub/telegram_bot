@@ -1,25 +1,34 @@
-# Python cache
+# Byte-compiled / cache
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 
-# Virtual env
+# Virtual environments
 .venv/
 env/
+venv/
 
 # IDE configs
 .vscode/
 .idea/
 
-# Local files
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Env config
 .env
+
+# Databases / local files
 bot.db
 *.sqlite3
 *.log
-*.txt
 
-# Old versions
+# Temporary / debug files
+*.txt
+PATCHED_OK.txt
+Команда запуска .txt
+
+# Old versions / backup folders
 broken_version/
 working_version/
-

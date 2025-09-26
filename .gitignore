@@ -1,22 +1,25 @@
-# Виртуальное окружение
-.venv/
-
-# Кэш Python
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 
-# Логи (все логи игнорим, кроме last_error.log)
-logs/*
-!logs/last_error.log
+# Virtual env
+.venv/
+env/
 
-# Секреты и настройки
-.env
+# IDE configs
+.vscode/
+.idea/
 
+# Local files
 .env
 bot.db
-*.sqlite
 *.sqlite3
-*.zip
-__pycache__/
-.venv/
+*.log
+*.txt
+
+# Old versions
+broken_version/
+working_version/
+

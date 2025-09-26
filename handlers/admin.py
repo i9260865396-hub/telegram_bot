@@ -103,6 +103,8 @@ class AddService(StatesGroup):
     waiting_for_unit = State()
     waiting_for_min = State()
 
+class DeadlinesEdit(StatesGroup):
+    waiting_for_deadline = State()
 # =======================
 #       /admin & menu
 # =======================
@@ -125,59 +127,28 @@ async def settings_menu(message: types.Message):
         await message.answer("⛔ У вас нет доступа."); return
     await message.answer("Раздел настроек:", reply_markup=settings_kb())
 
-# =======================
-#   Новые разделы меню
-# =======================
-
-@router.message(F.text == "⏰ Сроки")
-async def deadlines_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("📅 Раздел «Сроки» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "📦 Доставка")
-async def delivery_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("🚚 Раздел «Доставка» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "👨‍💻 Админы")
-async def admins_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("👨‍💻 Раздел «Админы» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "🤖 Инструменты ИИ")
-async def ai_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("🤖 Раздел «Инструменты ИИ» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "📢 Уведомления")
-async def notifications_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("🔔 Раздел «Уведомления» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "📊 Статистика")
-async def stats_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("📊 Раздел «Статистика» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "📂 Архив заказов")
-async def archive_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("📂 Раздел «Архив заказов» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "⚡ Системные параметры")
-async def system_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("⚙ Раздел «Системные параметры» (заглушка)", reply_markup=settings_kb())
-
-@router.message(F.text == "🔑 API")
-async def api_section(message: types.Message):
-    if not await is_admin(message.from_user.id): return
-    await message.answer("🔑 Раздел «API» (заглушка)", reply_markup=settings_kb())
-
 @router.message(F.text == "🔙 Назад")
 async def back_to_admin(message: types.Message):
     if not await is_admin(message.from_user.id): return
     await message.answer("Возврат в админку:", reply_markup=admin_main_kb())
+
+@router.message(F.text == "⏰ Сроки")
+async def deadlines_section(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id): return
+    await state.set_state(DeadlinesEdit.waiting_for_deadline)
+    await message.answer(f"📅 Текущий cut-off: {settings.WORKDAY_END_HOUR}:00\nВведите новое время (0-23):")
+
+@router.message(DeadlinesEdit.waiting_for_deadline)
+async def deadlines_update(message: types.Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("Введите число (0-23)."); return
+    hour = int(message.text)
+    if hour < 0 or hour > 23:
+        await message.answer("Часы должны быть 0-23."); return
+    settings.WORKDAY_END_HOUR = hour
+    await state.clear()
+    await message.answer(f"✅ Cut-off обновлён: {hour}:00", reply_markup=settings_kb())
+
 
 # =======================
 #   Заказы
@@ -194,6 +165,18 @@ async def show_orders(message: types.Message):
     text = "📋 Последние заказы:\n\n"
     for o in orders: text += f"#{o.id} — {o.description}\nСтатус: {o.status}\n\n"
     await message.answer(text)
+
+@router.message(F.text == "💰 Цены / Услуги")
+async def services_root(message: types.Message):
+    if not await is_admin(message.from_user.id):
+        await message.answer("⛔ У вас нет доступа."); return
+    async with async_session() as session:
+        res = await session.execute(select(Service).order_by(Service.id))
+        items = res.scalars().all()
+    if not items:
+        await message.answer("Пока нет ни одной услуги."); return
+    await message.answer("Выберите услугу:", reply_markup=services_list_kb(items))
+
 # =======================
 #   Инструменты ИИ
 # =======================

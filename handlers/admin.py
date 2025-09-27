@@ -154,22 +154,34 @@ async def deadlines_menu(message: types.Message, state: FSMContext):
     )
 
 @router.message(DeadlinesEdit())
-async def deadlines_set(message: Message, state: FSMContext, session: AsyncSession):
+async def deadlines_set(message: types.Message, state: FSMContext):
     text = message.text.strip()
 
-    # Проверка: введено ли число
-    if not text.isdigit():
-        await message.answer("⛔ Введите число (в часах).")
+    parts = text.split(":")
+    if len(parts) != 2:
+        await message.answer("⛔ Введите время в формате ЧЧ:ММ (например 16:00).")
         return
 
-    hours = int(text)
+    hours, minutes = parts
+    if not (hours.isdigit() and minutes.isdigit()):
+        await message.answer("⛔ Время должно содержать только цифры (например 08:30).")
+        return
 
-    # Обновляем дедлайн в базе
-    await session.execute(update(Service).values(deadline=hours))
-    await session.commit()
+    hours, minutes = int(hours), int(minutes)
+    if hours < 0 or hours > 23 or minutes < 0 or minutes > 59:
+        await message.answer("⛔ Часы должны быть 0–23, минуты 0–59.")
+        return
 
-    await message.answer(f"✅ Дедлайн обновлён: {hours} ч.")
+    formatted_time = f"{hours:02d}:{minutes:02d}"
+
+    # сохраняем в базу как строку "ЧЧ:ММ"
+    async with async_session() as session:
+        await session.execute(update(Service).values(deadline=formatted_time))
+        await session.commit()
+
+    await message.answer(f"✅ Дедлайн обновлён: {formatted_time}")
     await state.clear()
+
 
 # =======================
 #   Заказы

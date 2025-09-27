@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from config.settings import settings
 from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 from database.base import async_session
 from database.models import Order, Service, Admin
 

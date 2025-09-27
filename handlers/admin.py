@@ -3,11 +3,13 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import select
-
 from config.settings import settings
+from sqlalchemy import select
 from database.base import async_session
 from database.models import Order, Service, Admin
+
+class DeadlinesEdit(StatesGroup):
+    waiting_for_deadline = State()
 
 router = Router()
 
@@ -142,15 +144,15 @@ async def back_to_admin(message: types.Message, state: FSMContext):
 # =======================
 
 @router.message(F.text == "⏰ Сроки")
-async def deadlines_section(message: types.Message, state: FSMContext):
+async def deadlines_menu(message: types.Message, state: FSMContext):
     if not await is_admin(message.from_user.id): return
     await state.set_state(DeadlinesEdit.waiting_for_deadline)
     await message.answer(
         f"📅 Текущий cut-off: {settings.workday_end_hour}:00\nВведите новое время (0-23):"
     )
 
-@router.message(DeadlinesEdit.waiting_for_deadline, F.text.regexp(r"^\d{1,2}$"))
-async def deadlines_update_numeric(message: types.Message, state: FSMContext):
+@router.message(DeadlinesEdit.waiting_for_deadline)
+async def deadlines_set(message: types.Message, state: FSMContext):
     hour = int(message.text)
     if not 0 <= hour <= 23:
         await message.answer("Часы должны быть 0-23."); return

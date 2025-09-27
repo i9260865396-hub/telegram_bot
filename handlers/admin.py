@@ -524,7 +524,7 @@ async def service_add_name(message: types.Message, state: FSMContext):
     if len(name) < 2:
         return await message.answer("Название слишком короткое. Введите снова:")
     data = await state.get_data()
-    new = data.get("new_service", {{}})
+    new = data.get("new_service", {})
     new["name"] = name
     await state.update_data(new_service={"name": message.text.strip()})
     await state.set_state(AddService.waiting_for_price)

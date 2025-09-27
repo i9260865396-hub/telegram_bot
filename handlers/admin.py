@@ -508,16 +508,16 @@ async def svc_delete(callback: types.CallbackQuery, state: FSMContext):
 
 # Добавить услугу
 @router.callback_query(F.data == "svc:add")
-async def add_service_start(callback: types.CallbackQuery, state: FSMContext):
+async def service_add_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         return await callback.answer("Нет доступа", show_alert=True)
+    await state.update_data(new_service={})   # фикс: {{}} → {}
     await state.set_state(AddService.waiting_for_name)
-    await state.update_data(new_service={})
     await callback.message.answer("Введите название новой услуги:")
     await callback.answer()
-
+    
 @router.message(AddService.waiting_for_name)
-async def add_service_name(message: types.Message, state: FSMContext):
+async def service_add_name(message: types.Message, state: FSMContext):
     if not await is_admin(message.from_user.id):
         return
     name = message.text.strip()
@@ -528,15 +528,15 @@ async def add_service_name(message: types.Message, state: FSMContext):
     new["name"] = name
     await state.update_data(new_service={"name": message.text.strip()})
     await state.set_state(AddService.waiting_for_price)
-    await message.answer("Введите цену (например: 12.5):")
+    await message.answer("Введите цену (число):")
+
     
 @router.message(AddService.waiting_for_price)
-async def add_service_price(message: types.Message, state: FSMContext):
+async def service_add_price(message: types.Message, state: FSMContext):
     try:
-        price = float(message.text.strip().replace(",", "."))
+        price = float(message.text.replace(",", "."))
     except ValueError:
-        return await message.answer("⛔ Введите корректное число (например: 12.5).")
-
+        return await message.answer("⛔ Введите корректное число.")
     data = await state.get_data()
     new = data.get("new_service", {})
     new["price"] = price
@@ -545,33 +545,27 @@ async def add_service_price(message: types.Message, state: FSMContext):
     await message.answer("Введите единицу измерения (шт., м, м²):")
     
 @router.message(AddService.waiting_for_unit)
-async def add_service_unit(message: types.Message, state: FSMContext):
+async def service_add_unit(message: types.Message, state: FSMContext):
     unit = message.text.strip().lower()
-    allowed = {"шт.", "шт", "м", "м²", "м2"}
+    allowed = {"шт.", "шт", "м", "м²", "м2"}   # фикс: {{}} → {}
     if unit not in allowed:
-        return await message.answer("⛔ Допустимые варианты: шт., м, м²")
-
+        return await message.answer("⛔ Допустимые значения: шт., м, м²")
     unit_norm = "шт." if unit.startswith("шт") else ("м²" if unit in {"м²", "м2"} else "м")
-
     data = await state.get_data()
     new = data.get("new_service", {})
     new["unit"] = unit_norm
     await state.update_data(new_service=new)
     await state.set_state(AddService.waiting_for_min_qty)
-    await message.answer("Введите минимальное количество (целое число):")
+    await message.answer("Введите минимальное количество (число):")
 
 @router.message(AddService.waiting_for_min_qty)
-async def add_service_min_qty(message: types.Message, state: FSMContext):
+async def service_add_min_qty(message: types.Message, state: FSMContext):
     if not message.text.isdigit():
-        return await message.answer("⛔ Введите целое число.")
-
+        return await message.answer("⛔ Введите число.")
     min_qty = int(message.text)
     data = await state.get_data()
     new = data.get("new_service", {})
 
-    # Сохраняем в БД
-    from database.models import Service
-    from database import async_session
     async with async_session() as session:
         service = Service(
             name=new["name"],
@@ -582,7 +576,10 @@ async def add_service_min_qty(message: types.Message, state: FSMContext):
         session.add(service)
         await session.commit()
 
-    await state.clear()
-    await message.answer(f"✅ Услуга <b>{new['name']}</b> добавлена.")
-    await message.answer("Список услуг:", reply_markup=services_list_kb(items))
+        # Загружаем список услуг после добавления
+        res = await session.execute(select(Service).order_by(Service.id))
+        items = res.scalars().all()
 
+    await state.clear()
+    await message.answer("✅ Услуга добавлена.")
+    await message.answer("Список услуг:", reply_markup=services_list_kb(items))

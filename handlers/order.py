@@ -4,6 +4,8 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
+from keyboards.main import main_menu
+
 router = Router()
 
 
@@ -15,14 +17,6 @@ class OrderFSM(StatesGroup):
 
 
 # === Клавиатуры ===
-main_menu_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="Новый заказ")],
-        [KeyboardButton(text="Статус заказа")],
-    ],
-    resize_keyboard=True
-)
-
 cancel_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="❌ Отмена")]
@@ -32,7 +26,7 @@ cancel_kb = ReplyKeyboardMarkup(
 
 
 # === Старт нового заказа ===
-@router.message(F.text == "Новый заказ")
+@router.message(F.text == "🆕 Новый заказ")
 async def start_order(message: Message, state: FSMContext):
     await state.set_state(OrderFSM.choosing_product)
     await message.answer(
@@ -73,7 +67,7 @@ async def confirm_order(message: Message, state: FSMContext):
         f"✅ Заказ принят!\n"
         f"📦 {data['product']}\n"
         f"🔢 {data['quantity']}",
-        reply_markup=main_menu_kb
+        reply_markup=main_menu()
     )
     await state.clear()
 
@@ -82,4 +76,4 @@ async def confirm_order(message: Message, state: FSMContext):
 @router.message(F.text.lower().contains("отмена"))
 async def cancel_order(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("❌ Заказ отменён", reply_markup=main_menu_kb)
+    await message.answer("❌ Заказ отменён", reply_markup=main_menu())

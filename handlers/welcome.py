@@ -1,7 +1,10 @@
 from aiogram import Router, types
 from aiogram.filters import Command
 
+from keyboards.main import main_menu
+
 router = Router()
+
 
 @router.message(Command("start"))
 async def welcome_handler(message: types.Message):
@@ -10,5 +13,6 @@ async def welcome_handler(message: types.Message):
         "Доступные команды:\n"
         "- /order — новый заказ\n"
         "- /status — статус заказа\n"
-        "- /admin — админ-панель"
+        "- /admin — админ-панель",
+        reply_markup=main_menu()
     )

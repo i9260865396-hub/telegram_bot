@@ -1,57 +1,41 @@
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Integer, String, Float, Boolean, DateTime, ForeignKey, Text
-from datetime import datetime
+from __future__ import annotations
 
-class Base(DeclarativeBase):
-    pass
+from typing import List
 
-# ------------------------
-#   Заказы
-# ------------------------
-class Order(Base):
-    __tablename__ = "orders"
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer)
-    description: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String, default="new")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-# ------------------------
-#   Услуги
-# ------------------------
-class Service(Base):
-    __tablename__ = "services"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(100))
-    price: Mapped[float] = mapped_column(Float, default=0.0)
-    unit: Mapped[str] = mapped_column(String(20), default="шт.")
-    min_qty: Mapped[int] = mapped_column(Integer, default=1)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-
-# ------------------------
-#   Админы
-# ------------------------
-class Admin(Base):
-    __tablename__ = "admins"
-
-    user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-
-# ------------------------
-#   Настройки (key-value)
-# ------------------------
-class Setting(Base):
-    __tablename__ = "settings"
-
-    key: Mapped[str] = mapped_column(String(50), primary_key=True)
-    value: Mapped[str] = mapped_column(String(200))
-
-    def __repr__(self):
-        return f"<Setting {self.key}={self.value}>"
 
 class Settings(BaseSettings):
-    AI_ENABLED: bool = False
-    NOTIFY_ENABLED: bool = True
-    WORKDAY_END_HOUR: int = 16
-    TIMEZONE: str = "Europe/Vilnius"
+    """Application configuration loaded from environment variables or .env files."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    bot_token: str = Field(default="", alias="BOT_TOKEN")
+    database_url: str = Field(default="sqlite+aiosqlite:///./bot.db", alias="DATABASE_URL")
+    admin_ids: List[int] = Field(default_factory=list, alias="ADMIN_IDS")
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    AI_ENABLED: bool = Field(default=False)
+    NOTIFY_ENABLED: bool = Field(default=True)
+    WORKDAY_END_HOUR: int = Field(default=16)
+    TIMEZONE: str = Field(default="Europe/Vilnius")
+
+    @field_validator("admin_ids", mode="before")
+    @classmethod
+    def parse_admin_ids(cls, value: object) -> List[int]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            parts = [item.strip() for item in value.split(",")]
+            return [int(item) for item in parts if item]
+        if isinstance(value, (list, tuple, set)):
+            return [int(item) for item in value]
+        raise TypeError("ADMIN_IDS must be provided as a comma-separated string or an iterable of integers")
+
+    def get_admin_ids(self) -> List[int]:
+        """Return a list of administrator IDs as integers."""
+
+        return list(self.admin_ids)
+
+
+settings = Settings()

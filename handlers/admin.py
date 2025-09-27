@@ -105,10 +105,7 @@ class AddService(StatesGroup):
     waiting_for_name = State()
     waiting_for_price = State()
     waiting_for_unit = State()
-    waiting_for_min = State()
-
-class DeadlinesEdit(StatesGroup):
-    waiting_for_deadline = State()
+    waiting_for_min_qty = State()
 
 # =======================
 #       /admin & menu
@@ -511,16 +508,16 @@ async def svc_delete(callback: types.CallbackQuery, state: FSMContext):
 
 # Добавить услугу
 @router.callback_query(F.data == "svc:add")
-async def svc_add_start(callback: types.CallbackQuery, state: FSMContext):
+async def add_service_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         return await callback.answer("Нет доступа", show_alert=True)
     await state.set_state(AddService.waiting_for_name)
-    await state.update_data(new_service={{}})
+    await state.update_data(new_service={})
     await callback.message.answer("Введите название новой услуги:")
     await callback.answer()
 
 @router.message(AddService.waiting_for_name)
-async def svc_add_name(message: types.Message, state: FSMContext):
+async def add_service_name(message: types.Message, state: FSMContext):
     if not await is_admin(message.from_user.id):
         return
     name = message.text.strip()
@@ -529,70 +526,63 @@ async def svc_add_name(message: types.Message, state: FSMContext):
     data = await state.get_data()
     new = data.get("new_service", {{}})
     new["name"] = name
-    await state.update_data(new_service=new)
+    await state.update_data(new_service={"name": message.text.strip()})
     await state.set_state(AddService.waiting_for_price)
-    await message.answer("Введите цену (число):")
-
+    await message.answer("Введите цену (например: 12.5):")
+    
 @router.message(AddService.waiting_for_price)
-async def svc_add_price(message: types.Message, state: FSMContext):
-    if not await is_admin(message.from_user.id):
-        return
-    raw = (message.text or "").replace(",", ".").strip()
+async def add_service_price(message: types.Message, state: FSMContext):
     try:
-        price = float(raw)
-        if price < 0:
-            raise ValueError
+        price = float(message.text.strip().replace(",", "."))
     except ValueError:
-        return await message.answer("⛔ Введите корректную цену (например: 12.5)")
+        return await message.answer("⛔ Введите корректное число (например: 12.5).")
+
     data = await state.get_data()
-    new = data.get("new_service", {{}})
+    new = data.get("new_service", {})
     new["price"] = price
     await state.update_data(new_service=new)
     await state.set_state(AddService.waiting_for_unit)
-    await message.answer("Введите единицу измерения (шт. / м / м²):")
-
+    await message.answer("Введите единицу измерения (шт., м, м²):")
+    
 @router.message(AddService.waiting_for_unit)
-async def svc_add_unit(message: types.Message, state: FSMContext):
-    if not await is_admin(message.from_user.id):
-        return
-    unit = message.text.strip()
-    allowed = {{"шт.", "шт", "м", "м²", "м2"}}
+async def add_service_unit(message: types.Message, state: FSMContext):
+    unit = message.text.strip().lower()
+    allowed = {"шт.", "шт", "м", "м²", "м2"}
     if unit not in allowed:
-        return await message.answer("⛔ Разрешено: шт., м, м². Введите снова:")
-    # нормализуем
-    unit_norm = "шт." if unit.startswith("шт") else ("м²" if unit in {{"м²","м2"}} else "м")
+        return await message.answer("⛔ Допустимые варианты: шт., м, м²")
+
+    unit_norm = "шт." if unit.startswith("шт") else ("м²" if unit in {"м²", "м2"} else "м")
+
     data = await state.get_data()
-    new = data.get("new_service", {{}})
+    new = data.get("new_service", {})
     new["unit"] = unit_norm
     await state.update_data(new_service=new)
-    await state.set_state(AddService.waiting_for_min)
-    await message.answer("Введите минимальный тираж (целое число >= 1):")
+    await state.set_state(AddService.waiting_for_min_qty)
+    await message.answer("Введите минимальное количество (целое число):")
 
-@router.message(AddService.waiting_for_min)
-async def svc_add_min(message: types.Message, state: FSMContext):
-    if not await is_admin(message.from_user.id):
-        return
-    try:
-        min_qty = int(message.text.strip())
-        if min_qty < 1:
-            raise ValueError
-    except ValueError:
-        return await message.answer("⛔ Введите целое число >= 1")
+@router.message(AddService.waiting_for_min_qty)
+async def add_service_min_qty(message: types.Message, state: FSMContext):
+    if not message.text.isdigit():
+        return await message.answer("⛔ Введите целое число.")
+
+    min_qty = int(message.text)
     data = await state.get_data()
-    new = data.get("new_service", {{}})
+    new = data.get("new_service", {})
+
+    # Сохраняем в БД
+    from database.models import Service
+    from database import async_session
     async with async_session() as session:
-        svc = Service(
-            name=new.get("name"),
-            price=new.get("price", 0.0),
-            unit=new.get("unit", "шт."),
+        service = Service(
+            name=new["name"],
+            price=new["price"],
+            unit=new["unit"],
             min_qty=min_qty,
-            is_active=True,
         )
-        session.add(svc)
+        session.add(service)
         await session.commit()
-        res = await session.execute(select(Service).order_by(Service.id))
-        items = res.scalars().all()
+
     await state.clear()
-    await message.answer("✅ Услуга добавлена.")
+    await message.answer(f"✅ Услуга <b>{new['name']}</b> добавлена.")
     await message.answer("Список услуг:", reply_markup=services_list_kb(items))
 

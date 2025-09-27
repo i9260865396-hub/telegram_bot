@@ -316,3 +316,283 @@ async def api_section(message: types.Message, state: FSMContext):
     if not await is_admin(message.from_user.id): return
     await state.clear()
     await message.answer("🔑 Раздел «API». Тут будут ключи/интеграции.", reply_markup=settings_kb())
+
+# =======================
+#   Услуги: callbacks + FSM handlers (добавлено)
+# =======================
+
+from sqlalchemy import select
+from aiogram.exceptions import TelegramBadRequest
+
+# Список услуг (обновить список по inline-кнопке)
+@router.callback_query(F.data == "svc:list")
+async def svc_list(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    await state.clear()
+    async with async_session() as session:
+        res = await session.execute(select(Service).order_by(Service.id))
+        items = res.scalars().all()
+    if not items:
+        try:
+            await callback.message.edit_text("Пока нет ни одной услуги.")
+        except TelegramBadRequest:
+            await callback.message.answer("Пока нет ни одной услуги.")
+        return await callback.answer()
+    try:
+        await callback.message.edit_text("Выберите услугу:", reply_markup=services_list_kb(items))
+    except TelegramBadRequest:
+        await callback.message.answer("Выберите услугу:", reply_markup=services_list_kb(items))
+    await callback.answer()
+
+# Назад в настройки
+@router.callback_query(F.data == "svc:back")
+async def svc_back(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    await state.clear()
+    await callback.message.edit_text("Раздел настроек:")
+    await callback.message.answer("Раздел настроек:", reply_markup=settings_kb())
+    await callback.answer()
+
+# Открыть карточку услуги
+@router.callback_query(F.data.startswith("svc:open:"))
+async def svc_open(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    await state.clear()
+    svc_id = int(callback.data.split(":")[2])
+    async with async_session() as session:
+        svc = await session.get(Service, svc_id)
+        if not svc:
+            await callback.answer("Услуга не найдена", show_alert=True); return
+        text = service_card_text(svc)
+    await callback.message.edit_text(text, reply_markup=service_card_kb(svc_id, svc.is_active), parse_mode="HTML")
+    await callback.answer()
+
+# Запросить изменение цены
+@router.callback_query(F.data.startswith("svc:ask_price:"))
+async def svc_ask_price(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    svc_id = int(callback.data.split(":")[2])
+    await state.set_state(PriceEdit.waiting_for_price)
+    await state.update_data(svc_id=svc_id)
+    await callback.message.answer("Введите новую цену (число, можно с точкой):")
+    await callback.answer()
+
+# Принять новую цену
+@router.message(PriceEdit.waiting_for_price)
+async def svc_set_price(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+    raw = (message.text or "").replace(",", ".").strip()
+    try:
+        price = float(raw)
+        if price < 0:
+            raise ValueError
+    except ValueError:
+        return await message.answer("⛔ Введите корректную цену (например: 12.5)")
+    data = await state.get_data()
+    svc_id = data.get("svc_id")
+    async with async_session() as session:
+        svc = await session.get(Service, svc_id)
+        if not svc:
+            await state.clear()
+            return await message.answer("Услуга не найдена.")
+        svc.price = price
+        await session.commit()
+        text = service_card_text(svc)
+    await state.clear()
+    await message.answer(f"✅ Цена обновлена: {price}")
+    await message.answer(text, reply_markup=service_card_kb(svc_id, svc.is_active), parse_mode="HTML")
+
+# Запросить изменение минимального тиража
+@router.callback_query(F.data.startswith("svc:ask_min:"))
+async def svc_ask_min(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    svc_id = int(callback.data.split(":")[2])
+    await state.set_state(MinQtyEdit.waiting_for_min)
+    await state.update_data(svc_id=svc_id)
+    await callback.message.answer("Введите новый минимум (целое число >= 1):")
+    await callback.answer()
+
+# Принять минимальный тираж
+@router.message(MinQtyEdit.waiting_for_min)
+async def svc_set_min(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+    try:
+        min_qty = int(message.text.strip())
+        if min_qty < 1:
+            raise ValueError
+    except ValueError:
+        return await message.answer("⛔ Введите целое число >= 1")
+    data = await state.get_data()
+    svc_id = data.get("svc_id")
+    async with async_session() as session:
+        svc = await session.get(Service, svc_id)
+        if not svc:
+            await state.clear()
+            return await message.answer("Услуга не найдена.")
+        svc.min_qty = min_qty
+        await session.commit()
+        text = service_card_text(svc)
+    await state.clear()
+    await message.answer(f"✅ Минимальный тираж обновлён: {min_qty}")
+    await message.answer(text, reply_markup=service_card_kb(svc_id, svc.is_active), parse_mode="HTML")
+
+# Запросить выбор единицы измерения
+@router.callback_query(F.data.startswith("svc:ask_unit:"))
+async def svc_ask_unit(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    svc_id = int(callback.data.split(":")[2])
+    await state.update_data(svc_id=svc_id)
+    await callback.message.edit_text("Выберите единицу измерения:", reply_markup=units_kb(svc_id))
+    await callback.answer()
+
+# Установить единицу
+@router.callback_query(F.data.startswith("svc:set_unit:"))
+async def svc_set_unit(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    _, _, svc_id_str, code = callback.data.split(":")
+    svc_id = int(svc_id_str)
+    label = UNIT_OPTIONS.get(code)
+    if not label:
+        return await callback.answer("Неизвестная единица", show_alert=True)
+    async with async_session() as session:
+        svc = await session.get(Service, svc_id)
+        if not svc:
+            return await callback.answer("Услуга не найдена", show_alert=True)
+        svc.unit = label
+        await session.commit()
+        text = service_card_text(svc)
+    await callback.message.edit_text(text, reply_markup=service_card_kb(svc_id, svc.is_active), parse_mode="HTML")
+    await callback.answer("Обновлено")
+
+# Переключить активность
+@router.callback_query(F.data.startswith("svc:toggle:"))
+async def svc_toggle(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    svc_id = int(callback.data.split(":")[2])
+    async with async_session() as session:
+        svc = await session.get(Service, svc_id)
+        if not svc:
+            return await callback.answer("Услуга не найдена", show_alert=True)
+        svc.is_active = not svc.is_active
+        await session.commit()
+        text = service_card_text(svc)
+    await callback.message.edit_text(text, reply_markup=service_card_kb(svc_id, svc.is_active), parse_mode="HTML")
+    await callback.answer("Изменено")
+
+# Удалить услугу
+@router.callback_query(F.data.startswith("svc:delete:"))
+async def svc_delete(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    svc_id = int(callback.data.split(":")[2])
+    async with async_session() as session:
+        svc = await session.get(Service, svc_id)
+        if not svc:
+            return await callback.answer("Услуга не найдена", show_alert=True)
+        await session.delete(svc)
+        await session.commit()
+        res = await session.execute(select(Service).order_by(Service.id))
+        items = res.scalars().all()
+    if not items:
+        await callback.message.edit_text("Услуга удалена. Больше услуг нет.")
+        return await callback.answer("Удалено")
+    await callback.message.edit_text("Услуга удалена. Список услуг:", reply_markup=services_list_kb(items))
+    await callback.answer("Удалено")
+
+# Добавить услугу
+@router.callback_query(F.data == "svc:add")
+async def svc_add_start(callback: types.CallbackQuery, state: FSMContext):
+    if not await is_admin(callback.from_user.id):
+        return await callback.answer("Нет доступа", show_alert=True)
+    await state.set_state(AddService.waiting_for_name)
+    await state.update_data(new_service={{}})
+    await callback.message.answer("Введите название новой услуги:")
+    await callback.answer()
+
+@router.message(AddService.waiting_for_name)
+async def svc_add_name(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+    name = message.text.strip()
+    if len(name) < 2:
+        return await message.answer("Название слишком короткое. Введите снова:")
+    data = await state.get_data()
+    new = data.get("new_service", {{}})
+    new["name"] = name
+    await state.update_data(new_service=new)
+    await state.set_state(AddService.waiting_for_price)
+    await message.answer("Введите цену (число):")
+
+@router.message(AddService.waiting_for_price)
+async def svc_add_price(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+    raw = (message.text or "").replace(",", ".").strip()
+    try:
+        price = float(raw)
+        if price < 0:
+            raise ValueError
+    except ValueError:
+        return await message.answer("⛔ Введите корректную цену (например: 12.5)")
+    data = await state.get_data()
+    new = data.get("new_service", {{}})
+    new["price"] = price
+    await state.update_data(new_service=new)
+    await state.set_state(AddService.waiting_for_unit)
+    await message.answer("Введите единицу измерения (шт. / м / м²):")
+
+@router.message(AddService.waiting_for_unit)
+async def svc_add_unit(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+    unit = message.text.strip()
+    allowed = {{"шт.", "шт", "м", "м²", "м2"}}
+    if unit not in allowed:
+        return await message.answer("⛔ Разрешено: шт., м, м². Введите снова:")
+    # нормализуем
+    unit_norm = "шт." if unit.startswith("шт") else ("м²" if unit in {{"м²","м2"}} else "м")
+    data = await state.get_data()
+    new = data.get("new_service", {{}})
+    new["unit"] = unit_norm
+    await state.update_data(new_service=new)
+    await state.set_state(AddService.waiting_for_min)
+    await message.answer("Введите минимальный тираж (целое число >= 1):")
+
+@router.message(AddService.waiting_for_min)
+async def svc_add_min(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+    try:
+        min_qty = int(message.text.strip())
+        if min_qty < 1:
+            raise ValueError
+    except ValueError:
+        return await message.answer("⛔ Введите целое число >= 1")
+    data = await state.get_data()
+    new = data.get("new_service", {{}})
+    async with async_session() as session:
+        svc = Service(
+            name=new.get("name"),
+            price=new.get("price", 0.0),
+            unit=new.get("unit", "шт."),
+            min_qty=min_qty,
+            is_active=True,
+        )
+        session.add(svc)
+        await session.commit()
+        res = await session.execute(select(Service).order_by(Service.id))
+        items = res.scalars().all()
+    await state.clear()
+    await message.answer("✅ Услуга добавлена.")
+    await message.answer("Список услуг:", reply_markup=services_list_kb(items))
+

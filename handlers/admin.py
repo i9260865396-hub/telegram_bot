@@ -151,14 +151,23 @@ async def deadlines_menu(message: types.Message, state: FSMContext):
         f"📅 Текущий cut-off: {settings.workday_end_hour}:00\nВведите новое время (0-23):"
     )
 
-@router.message(DeadlinesEdit.waiting_for_deadline)
-async def deadlines_set(message: types.Message, state: FSMContext):
-    hour = int(message.text)
-    if not 0 <= hour <= 23:
-        await message.answer("Часы должны быть 0-23."); return
-    settings.workday_end_hour = hour
+@router.message(DeadlinesEdit())
+async def deadlines_set(message: Message, state: FSMContext, session: AsyncSession):
+    text = message.text.strip()
+
+    # Проверка: введено ли число
+    if not text.isdigit():
+        await message.answer("⛔ Введите число (в часах).")
+        return
+
+    hours = int(text)
+
+    # Обновляем дедлайн в базе
+    await session.execute(update(Service).values(deadline=hours))
+    await session.commit()
+
+    await message.answer(f"✅ Дедлайн обновлён: {hours} ч.")
     await state.clear()
-    await message.answer(f"✅ Cut-off обновлён: {hour}:00", reply_markup=settings_kb())
 
 # =======================
 #   Заказы

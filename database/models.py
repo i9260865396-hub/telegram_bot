@@ -33,6 +33,8 @@ class Service(Base):
     unit: Mapped[str] = mapped_column(String(50), nullable=False, default="шт.")
     min_qty: Mapped[int] = mapped_column(nullable=False, default=1)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Новое поле для хранения дедлайна в формате "ЧЧ:ММ"
+    deadline: Mapped[str] = mapped_column(String(5), nullable=True)
 
 
 class Setting(Base):
